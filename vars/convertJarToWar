@@ -1,0 +1,38 @@
+/**
+ * Converts a stashed JAR into a WAR by unpacking and repackaging.
+ *
+ * @param Map params (all optional—defaults shown)
+ *   - jarStash (String): name of the JAR stash (default: 'app-jar')
+ *   - warStash (String): name of the WAR stash (default: 'app-war')
+ */
+def call(Map params = [:]) {
+    String jarStash = params.jarStash ?: 'app-jar'
+    String warStash = params.warStash ?: 'app-war'
+
+    // Unstash the JAR produced in the build stage
+    unstash jarStash
+
+    // Locate the JAR file and set env vars
+    script {
+        def file = findFiles(glob: 'target/*.jar')[0]
+        env.JAR_PATH = file.path
+        env.JAR_NAME = file.name
+        env.WAR_NAME = file.name.replace('.jar', '.war')
+    }
+
+    // Repackage into a WAR
+    sh """
+      rm -rf war_staging ${env.WAR_NAME}
+      mkdir -p war_staging/WEB-INF/lib war_staging/WEB-INF/classes
+      cp ${env.JAR_PATH} war_staging/WEB-INF/lib/
+      unzip -q war_staging/WEB-INF/lib/${env.JAR_NAME} -d war_staging/WEB-INF/classes
+      cd war_staging
+      jar cf ../${env.WAR_NAME} .
+    """.stripIndent()
+
+    // Archive & stash the WAR for downstream stages
+    archiveArtifacts artifacts: "${env.WAR_NAME}", fingerprint: true
+    stash includes: "${env.WAR_NAME}", name: warStash
+
+    echo "Converted ${env.JAR_NAME} → ${env.WAR_NAME} and stashed as '${warStash}'"
+}
