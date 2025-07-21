@@ -1,0 +1,39 @@
+// vars/waitForNexusReady.groovy
+
+/**
+ * Waits until a Nexus instance responds with HTTP 200 on its status endpoint.
+ *
+ * @param Map params
+ *   - credentialsId (String): Jenkins creds ID for Nexus deployer (default: 'nexus-deployer')
+ *   - url           (String): full URL to Nexus status endpoint 
+ *                             (default: "http://${env.NEXUS_HOST}/service/rest/v1/status")
+ *   - attempts      (int)   : number of curl retries (default: 20)
+ *   - interval      (int)   : wait seconds between attempts (default: 30)
+ */
+def call(Map params = [:]) {
+    String credentialsId = params.credentialsId ?: 'nexus-deployer'
+    String endpointUrl   = params.url           ?: "http://${env.NEXUS_HOST}/service/rest/v1/status"
+    int attempts         = params.attempts      ?: 20
+    int interval         = params.interval      ?: 30
+
+    withCredentials([usernamePassword(
+        credentialsId: credentialsId,
+        usernameVariable: 'NEXUS_USR',
+        passwordVariable: 'NEXUS_PSW'
+    )]) {
+        sh """
+            echo "Waiting for Nexus at ${endpointUrl}"
+            for i in \$(seq 1 ${attempts}); do
+              STATUS=\$(curl -u \$NEXUS_USR:\$NEXUS_PSW -s -o /dev/null -w "%{http_code}" ${endpointUrl} || echo "000")
+              echo "→ HTTP \$STATUS"
+              if [ "\$STATUS" -eq 200 ]; then
+                echo "✓ Nexus is up!"
+                exit 0
+              fi
+              sleep ${interval}
+            done
+            echo "✗ Nexus did not respond after \$(( ${attempts} * ${interval} / 60 )) minutes."
+            exit 1
+        """.stripIndent()
+    }
+}
