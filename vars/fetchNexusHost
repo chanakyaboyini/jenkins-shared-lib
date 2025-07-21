@@ -1,0 +1,42 @@
+// vars/fetchNexusHost.groovy
+
+/**
+ * Resolves the public IP of the Nexus EC2 and sets env.NEXUS_HOST
+ *
+ * @param Map params (all optional—fallbacks read from env)
+ *   - credentialsId : AWS creds ID (defaults to env.AWS_CREDENTIALS)
+ *   - instanceIdEnv : name of env var holding the instance ID (default: 'NEXUS_INSTANCE_ID')
+ *   - regionEnv     : name of env var holding the region (default: 'AWS_REGION')
+ *   - portEnv       : name of env var holding the Nexus port (default: 'NEXUS_PORT')
+ */
+def call(Map params = [:]) {
+    String creds     = params.credentialsId ?: env.AWS_CREDENTIALS
+    String instEnv    = params.instanceIdEnv ?: 'NEXUS_INSTANCE_ID'
+    String regionEnv  = params.regionEnv    ?: 'AWS_REGION'
+    String portEnv    = params.portEnv      ?: 'NEXUS_PORT'
+
+    String instanceId = env."${instEnv}"
+    String region     = env."${regionEnv}"
+    String port       = env."${portEnv}"
+
+    withCredentials([[
+      $class: 'AmazonWebServicesCredentialsBinding',
+      credentialsId: creds,
+      accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+      secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+    ]]) {
+        def ip = sh(
+          script: """
+            aws ec2 describe-instances \
+              --instance-ids ${instanceId} \
+              --region ${region} \
+              --query 'Reservations[0].Instances[0].PublicIpAddress' \
+              --output text
+          """.stripIndent(),
+          returnStdout: true
+        ).trim()
+
+        env.NEXUS_HOST = "${ip}:${port}"
+        echo "Resolved Nexus host: ${env.NEXUS_HOST}"
+    }
+}
