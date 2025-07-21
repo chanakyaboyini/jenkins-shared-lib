@@ -1,0 +1,31 @@
+// vars/buildAndPackage.groovy
+
+/**
+ * Runs Maven build & package then stashes the resulting JAR(s).
+ *
+ * @param Map params
+ *   - pomPath        : Path to pom.xml (default: 'pom.xml')
+ *   - skipTests      : Skip tests? (default: true)
+ *   - skipCheckstyle : Skip Checkstyle? (default: true)
+ *   - stashIncludes  : Glob of files to stash (default: 'target/*.jar')
+ *   - stashName      : Name of the stash (default: 'app-jar')
+ */
+def call(Map params = [:]) {
+    // Resolve parameters with defaults
+    String pom        = params.pomPath        ?: 'pom.xml'
+    boolean skipTests = params.skipTests      != false  // default true
+    boolean skipCS    = params.skipCheckstyle != false  // default true
+    String includes   = params.stashIncludes  ?: 'target/*.jar'
+    String name       = params.stashName      ?: 'app-jar'
+
+    // Build command
+    def cmd = "mvn -f ${pom} clean package"
+    if (skipTests) cmd += " -DskipTests"
+    if (skipCS)    cmd += " -Dcheckstyle.skip=true"
+
+    // Execute build
+    sh cmd
+
+    // Stash artifacts
+    stash includes: includes, name: name
+}
